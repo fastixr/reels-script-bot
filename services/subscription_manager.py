@@ -29,20 +29,20 @@ class SubscriptionManager:
     PREMIUM_DURATION_DAYS = 30
     
     @staticmethod
-    def get_user_plan(user_id: int) -> str:
+    async def get_user_plan(user_id: int) -> str:
         """Возвращает текущий тариф пользователя"""
-        subscription = Database.get_subscription(user_id)
+        subscription = await Database.get_subscription(user_id)
         if subscription:
             return subscription.get("plan", SubscriptionManager.FREE_PLAN)
         return SubscriptionManager.FREE_PLAN
     
     @staticmethod
-    def has_active_subscription(user_id: int) -> bool:
+    async def has_active_subscription(user_id: int) -> bool:
         """Проверяет, есть ли у пользователя активная подписка"""
-        return Database.has_active_subscription(user_id)
+        return await Database.has_active_subscription(user_id)
     
     @staticmethod
-    def activate_subscription(user_id: int, duration_days: int = None) -> bool:
+    async def activate_subscription(user_id: int, duration_days: int = None) -> bool:
         """
         Активирует подписку для пользователя
         
@@ -59,7 +59,7 @@ class SubscriptionManager:
         expires_at = datetime.now() + timedelta(days=duration_days)
         purchased_at = datetime.now()
         
-        Database.create_subscription(
+        await Database.create_subscription(
             user_id=user_id,
             plan=SubscriptionManager.PREMIUM_PLAN,
             expires_at=expires_at,
@@ -69,19 +69,40 @@ class SubscriptionManager:
         return True
     
     @staticmethod
-    def get_subscription_info(user_id: int) -> Optional[Dict]:
+    async def get_subscription_info(user_id: int) -> Optional[Dict]:
         """Возвращает информацию о подписке пользователя"""
-        return Database.get_subscription(user_id)
+        return await Database.get_subscription(user_id)
     
     @staticmethod
-    def cancel_subscription(user_id: int):
+    async def cancel_subscription(user_id: int):
         """Отменяет подписку пользователя"""
-        Database.cancel_subscription(user_id)
+        await Database.cancel_subscription(user_id)
         logger.info(f"Подписка отменена для пользователя {user_id}")
     
     @staticmethod
-    def get_all_subscriptions() -> Dict[int, Dict]:
+    async def get_all_subscriptions() -> Dict[int, Dict]:
         """Возвращает словарь всех активных подписок"""
-        subscriptions_list = Database.get_all_active_subscriptions()
-        return {sub["user_id"]: sub for sub in subscriptions_list}
+        try:
+            # Явно получаем результат async функции
+            subscriptions_list = await Database.get_all_active_subscriptions()
+            
+            # Проверяем, что получили список
+            if subscriptions_list is None:
+                return {}
+            
+            # Преобразуем в список, если это не список
+            if not isinstance(subscriptions_list, list):
+                logger.warning(f"get_all_active_subscriptions вернул не список: {type(subscriptions_list)}")
+                return {}
+            
+            # Создаем словарь
+            result = {}
+            for sub in subscriptions_list:
+                if isinstance(sub, dict) and "user_id" in sub:
+                    result[sub["user_id"]] = sub
+            
+            return result
+        except Exception as e:
+            logger.error(f"Ошибка при получении подписок: {e}", exc_info=True)
+            return {}
 
